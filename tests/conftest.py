@@ -40,7 +40,7 @@ def override_get_db():
         db.close()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def setup_test_db():
     """Créer les tables de test."""
     Base.metadata.create_all(bind=engine)
@@ -73,8 +73,7 @@ def db():
 
 @pytest.fixture
 def mock_firebase():
-    """Mock Firebase pour les tests."""
-    with patch('app.core.security.verify_firebase_token') as mock_verify:
+    with patch("app.api.deps.verify_firebase_token") as mock_verify:
         yield mock_verify
 
 
@@ -182,13 +181,13 @@ def sample_promo_code(db):
 
 @pytest.fixture
 def auth_headers_user(mock_firebase, sample_user):
-    """Headers d'authentification pour utilisateur."""
     mock_firebase.return_value = {
         "uid": sample_user.firebase_uid,
         "email": sample_user.email,
-        "email_verified": True
+        "email_verified": True,
     }
-    return {"Authorization": "Bearer fake_user_token"}
+    return {"Authorization": "Bearer faketoken"}
+
 
 
 @pytest.fixture

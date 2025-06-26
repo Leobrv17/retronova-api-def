@@ -10,6 +10,7 @@ from app.models.arcade import Arcade
 from app.models.friend import Friendship, FriendshipStatus
 from app.api.deps import get_current_user, verify_arcade_key
 from pydantic import BaseModel
+from sqlalchemy.orm import aliased
 
 router = APIRouter()
 
@@ -136,10 +137,13 @@ async def get_scores(
 ):
     """Récupère les scores avec filtres optionnels."""
 
+    Player1 = aliased(User, name="p1")
+    Player2 = aliased(User, name="p2")
+
     query = db.query(Score).join(
-        User.alias("p1"), Score.player1_id == User.id
+        Player1, Score.player1_id == Player1.id
     ).join(
-        User.alias("p2"), Score.player2_id == User.id
+        Player2, Score.player2_id == Player2.id
     ).join(
         Game, Score.game_id == Game.id
     ).join(

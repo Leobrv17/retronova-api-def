@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
-import json
 import os
 
 
@@ -13,11 +12,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
-    # Firebase
-    FIREBASE_USER_PROJECT_ID: str
-    FIREBASE_ADMIN_PROJECT_ID: str
-    FIREBASE_USER_CREDENTIALS: str  # JSON string
-    FIREBASE_ADMIN_CREDENTIALS: str  # JSON string
+    # Firebase - Chemins vers les fichiers JSON
+    FIREBASE_USER_CREDENTIALS_PATH: str
+    FIREBASE_ADMIN_CREDENTIALS_PATH: str
 
     # Arcade API Key
     ARCADE_API_KEY: str
@@ -30,14 +27,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
-
-    @property
-    def firebase_user_credentials_dict(self) -> dict:
-        return json.loads(self.FIREBASE_USER_CREDENTIALS)
-
-    @property
-    def firebase_admin_credentials_dict(self) -> dict:
-        return json.loads(self.FIREBASE_ADMIN_CREDENTIALS)
 
 
 settings = Settings()

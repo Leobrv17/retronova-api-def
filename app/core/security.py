@@ -3,6 +3,7 @@ from firebase_admin import credentials, auth
 from .config import settings
 from typing import Optional
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +17,23 @@ def init_firebase():
     global firebase_user_app, firebase_admin_app
 
     try:
+        # Vérifier que les fichiers existent
+        if not os.path.exists(settings.FIREBASE_USER_CREDENTIALS_PATH):
+            raise FileNotFoundError(
+                f"Fichier Firebase utilisateurs non trouvé : {settings.FIREBASE_USER_CREDENTIALS_PATH}")
+
+        if not os.path.exists(settings.FIREBASE_ADMIN_CREDENTIALS_PATH):
+            raise FileNotFoundError(f"Fichier Firebase admin non trouvé : {settings.FIREBASE_ADMIN_CREDENTIALS_PATH}")
+
         # App pour les utilisateurs finaux
-        user_cred = credentials.Certificate(settings.firebase_user_credentials_dict)
+        user_cred = credentials.Certificate(settings.FIREBASE_USER_CREDENTIALS_PATH)
         firebase_user_app = firebase_admin.initialize_app(
             user_cred,
             name="user_app"
         )
 
         # App pour les administrateurs
-        admin_cred = credentials.Certificate(settings.firebase_admin_credentials_dict)
+        admin_cred = credentials.Certificate(settings.FIREBASE_ADMIN_CREDENTIALS_PATH)
         firebase_admin_app = firebase_admin.initialize_app(
             admin_cred,
             name="admin_app"

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCD - Retronova API</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+        
+        .mcd-diagram {
+            position: relative;
+            width: 100%;
+            height: 1700px;
+            background: linear-gradient(45deg, #f8f9fa 25%, transparent 25%),
+                        linear-gradient(-45deg, #f8f9fa 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #f8f9fa 75%),
+                        linear-gradient(-45deg, transparent 75%, #f8f9fa 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border-radius: 15px;
+            overflow: visible;
+            border: 3px solid #e74c3c;
+            margin-bottom: 50px;
+        }
+        
+        .entity {
+            position: absolute;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            min-width: 140px;
+            border: 3px solid #2c3e50;
+            transform: perspective(1000px) rotateX(5deg);
+            z-index: 10;
+        }
+        
+        .entity h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+            text-align: center;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .entity .attributes {
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        
+        .entity .primary-key {
+            font-weight: bold;
+            text-decoration: underline;
+            color: #f1c40f;
+        }
+        
+        .entity .foreign-key {
+            color: #e67e22;
+            font-style: italic;
+        }
+        
+        /* Positionnement des entités */
+        .user { top: 50px; left: 50px; background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .arcade { top: 30px; left: 600px; background: linear-gradient(135deg, #f39c12, #e67e22); }
+        .game { top: 50px; left: 1050px; background: linear-gradient(135deg, #27ae60, #229954); }
+        
+        .reservation { top: 550px; left: 350px; background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .score { top: 450px; left: 1050px; background: linear-gradient(135deg, #34495e, #2c3e50); }
+        
+        .friendship { top: 850px; left: 50px; background: linear-gradient(135deg, #16a085, #138d75); }
+        .arcade-game { top: 870px; left: 650px; background: linear-gradient(135deg, #d35400, #c0392b); }
+        
+        .ticket-offer { top: 1250px; left: 50px; background: linear-gradient(135deg, #8e44ad, #7d3c98); }
+        .ticket-purchase { top: 1250px; left: 400px; background: linear-gradient(135deg, #2980b9, #21618c); }
+        .promo-code { top: 1250px; left: 750px; background: linear-gradient(135deg, #c0392b, #a93226); }
+        .promo-use { top: 900px; left: 1100px; background: linear-gradient(135deg, #795548, #6d4c41); }
+        
+        /* Styles pour les lignes de relation */
+        .relation-line {
+            position: absolute;
+            z-index: 1;
+        }
+        
+        .relation-line svg {
+            position: absolute;
+            overflow: visible;
+        }
+        
+        .relation-line path {
+            fill: none;
+            stroke: #34495e;
+            stroke-width: 3;
+            marker-end: url(#arrowhead);
+        }
+        
+        .relation-line.double-arrow path {
+            marker-start: url(#arrowhead);
+            marker-end: url(#arrowhead);
+        }
+        
+        /* Légende */
+        .legend {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background: rgba(255,255,255,0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            font-size: 0.9em;
+            min-width: 180px;
+            border: 2px solid #3498db;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+        
+        .pk { background: #f1c40f; }
+        .fk { background: #e67e22; }
+        .rel-color { background: #e74c3c; }
+        
+        /* Labels de cardinalité */
+        .cardinality-label {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #34495e;
+            z-index: 15;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 MCD - Retronova API</h1>
+        <p class="subtitle">Modèle Conceptuel de Données - Système de Gestion de Bornes d'Arcade</p>
+        
+        <div class="mcd-diagram">
+            <!-- Définition des marqueurs pour les flèches -->
+            <svg width="0" height="0">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+                            refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#34495e" />
+                    </marker>
+                </defs>
+            </svg>
+            
+            <!-- Entités principales -->
+            <div class="entity user">
+                <h3>👤 USER</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div>firebase_uid</div>
+                    <div>email</div>
+                    <div>nom</div>
+                    <div>prenom</div>
+                    <div>pseudo</div>
+                    <div>date_naissance</div>
+                    <div>numero_telephone</div>
+                    <div>tickets_balance</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                    <div>deleted_at</div>
+                </div>
+            </div>
+            
+            <div class="entity arcade">
+                <h3>🕹️ ARCADE</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div>nom</div>
+                    <div>description</div>
+                    <div>api_key</div>
+                    <div>localisation</div>
+                    <div>latitude</div>
+                    <div>longitude</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                    <div>deleted_at</div>
+                </div>
+            </div>
+            
+            <div class="entity game">
+                <h3>🎯 GAME</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div>nom</div>
+                    <div>description</div>
+                    <div>min_players</div>
+                    <div>max_players</div>
+                    <div>ticket_cost</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                    <div>deleted_at</div>
+                </div>
+            </div>
+            
+            <!-- Entités de liaison -->
+            <div class="entity reservation">
+                <h3>📅 RESERVATION</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div class="foreign-key">🔗 player_id</div>
+                    <div class="foreign-key">🔗 player2_id</div>
+                    <div class="foreign-key">🔗 arcade_id</div>
+                    <div class="foreign-key">🔗 game_id</div>
+                    <div>unlock_code</div>
+                    <div>status</div>
+                    <div>tickets_used</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                </div>
+            </div>
+            
+            <div class="entity score">
+                <h3>🏆 SCORE</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div class="foreign-key">🔗 player1_id</div>
+                    <div class="foreign-key">🔗 player2_id</div>
+                    <div class="foreign-key">🔗 game_id</div>
+                    <div class="foreign-key">🔗 arcade_id</div>
+                    <div>score_j1</div>
+                    <div>score_j2</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                </div>
+            </div>
+            
+            <div class="entity friendship">
+                <h3>👥 FRIENDSHIP</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div class="foreign-key">🔗 requester_id</div>
+                    <div class="foreign-key">🔗 requested_id</div>
+                    <div>status</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                </div>
+            </div>
+            
+            <div class="entity arcade-game">
+                <h3>🎮 ARCADE_GAME</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div class="foreign-key">🔗 arcade_id</div>
+                    <div class="foreign-key">🔗 game_id</div>
+                    <div>slot_number</div>
+                    <div>is_active</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                </div>
+            </div>
+            
+            <!-- Entités tickets et promos -->
+            <div class="entity ticket-offer">
+                <h3>🎫 TICKET_OFFER</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div>tickets_amount</div>
+                    <div>price_euros</div>
+                    <div>name</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                    <div>deleted_at</div>
+                </div>
+            </div>
+            
+            <div class="entity ticket-purchase">
+                <h3>💳 TICKET_PURCHASE</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div class="foreign-key">🔗 user_id</div>
+                    <div class="foreign-key">🔗 offer_id</div>
+                    <div>tickets_amount</div>
+                    <div>price_paid</div>
+                    <div>created_at</div>
+                </div>
+            </div>
+            
+            <div class="entity promo-code">
+                <h3>🎁 PROMO_CODE</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div>code</div>
+                    <div>tickets_amount</div>
+                    <div>usage_limit</div>
+                    <div>single_use_per_user</div>
+                    <div>global_single_use</div>
+                    <div>times_used</div>
+                    <div>created_at</div>
+                    <div>updated_at</div>
+                    <div>deleted_at</div>
+                </div>
+            </div>
+            
+            <div class="entity promo-use">
+                <h3>📋 PROMO_USE</h3>
+                <div class="attributes">
+                    <div class="primary-key">🔑 id</div>
+                    <div class="foreign-key">🔗 user_id</div>
+                    <div class="foreign-key">🔗 promo_code_id</div>
+                    <div>tickets_received</div>
+                    <div>created_at</div>
+                </div>
+            </div>
+            
+            <!-- Relations avec flèches -->
+            <!-- USER -> RESERVATION -->
+            <div class="relation-line">
+                <svg width="350" height="400" style="left: 120px; top: 100px;">
+                    <path d="M 0,0 L 250,430" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 230px; top: 280px;">1,N</div>
+            <div class="cardinality-label" style="left: 300px; top: 520px;">1,1</div>
+            
+            <!-- USER -> SCORE -->
+            <div class="relation-line">
+                <svg width="750" height="400" style="left: 120px; top: 100px;">
+                    <path d="M 0,0 L 930,450" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 230px; top: 150px;">1,N</div>
+            <div class="cardinality-label" style="left: 1010px; top: 575px;">2,2</div>
+            
+            <!-- USER -> FRIENDSHIP -->
+            <div class="relation-line">
+                <svg width="100" height="700" style="left: 120px; top: 200px;">
+                    <path d="M 0,0 L 0,630" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 70px; top: 380px;">1,N</div>
+            <div class="cardinality-label" style="left: 130px; top: 830px;">2,2</div>
+            
+            <!-- ARCADE -> RESERVATION -->
+            <div class="relation-line">
+                <svg width="250" height="400" style="left: 450px; top: 100px;">
+                    <path d="M 170,0 L 0,430" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 540px; top: 180px;">1,N</div>
+            <div class="cardinality-label" style="left: 420px; top: 500px;">1,1</div>
+            
+            <!-- ARCADE -> ARCADE_GAME -->
+            <div class="relation-line">
+                <svg width="100" height="700" style="left: 620px; top: 200px;">
+                    <path d="M 0,0 L 100,650" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 650px; top: 330px;">1,N</div>
+            <div class="cardinality-label" style="left: 730px; top: 840px;">1,1</div>
+            
+            <!-- GAME -> RESERVATION -->
+            <div class="relation-line">
+                <svg width="750" height="400" style="left: 450px; top: 100px;">
+                    <path d="M 670,0 L 50,430" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 1000px; top: 150px;">1,N</div>
+            <div class="cardinality-label" style="left: 550px; top: 520px;">1,1</div>
+            
+            <!-- GAME -> SCORE -->
+            <div class="relation-line">
+                <svg width="250" height="300" style="left: 900px; top: 290px;">
+                    <path d="M 220,0 L 220,140" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 1130px; top: 320px;">1,N</div>
+            <div class="cardinality-label" style="left: 1070px; top: 430px;">1,1</div>
+            
+            <!-- GAME -> ARCADE_GAME -->
+            <div class="relation-line">
+                <svg width="500" height="700" style="left: 720px; top: 200px;">
+                    <path d="M 400,0 L 100,650" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 1080px; top: 280px;">1,N</div>
+            <div class="cardinality-label" style="left: 850px; top: 850px;">1,1</div>
+            
+            <!-- USER -> TICKET_PURCHASE -->
+            <div class="relation-line">
+                <svg width="350" height="1100" style="left: 120px; top: 200px;">
+                    <path d="M 0,0 L 300,1030" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 190px; top: 390px;">1,N</div>
+            <div class="cardinality-label" style="left: 370px; top: 1230px;">1,1</div>
+            
+            <!-- TICKET_OFFER -> TICKET_PURCHASE -->
+            <div class="relation-line">
+                <svg width="350" height="100" style="left: 190px; top: 1300px;">
+                    <path d="M 0,0 L 210,0" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 265px; top: 1295px;">1,N</div>
+            <div class="cardinality-label" style="left: 360px; top: 1285px;">1,1</div>
+            
+            <!-- USER -> PROMO_USE -->
+            <div class="relation-line">
+                <svg width="1000" height="1200" style="left: 120px; top: 100px;">
+                    <path d="M 0,0 L 980,850" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 230px; top: 190px;">1,N</div>
+            <div class="cardinality-label" style="left: 1050px; top: 970px;">1,1</div>
+            
+            <!-- PROMO_CODE -> PROMO_USE -->
+            <div class="relation-line">
+                <svg width="300" height="100" style="left: 890px; top: 1300px;">
+                    <path d="M 0,0 L 260,-235" />
+                </svg>
+            </div>
+            <div class="cardinality-label" style="left: 960px; top: 1270px;">0,N</div>
+            <div class="cardinality-label" style="left: 1150px; top: 1090px;">1,1</div>
+        </div>
+        
+        <!-- Légende -->
+        <div class="legend">
+            <h4>📖 Légende</h4>
+            <div class="legend-item">
+                <div class="legend-color pk"></div>
+                <span>Clé primaire</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color fk"></div>
+                <span>Clé étrangère</span>
+            </div>
+            <div class="legend-item">
+                <svg width="30" height="15">
+                    <defs>
+                        <marker id="legend-arrow" markerWidth="8" markerHeight="6" 
+                                refX="8" refY="3" orient="auto">
+                            <polygon points="0 0, 8 3, 0 6" fill="#34495e" />
+                        </marker>
+                    </defs>
+                    <line x1="0" y1="7" x2="25" y2="7" stroke="#34495e" stroke-width="2" marker-end="url(#legend-arrow)"/>
+                </svg>
+                <span>Relation</span>
+            </div>
+        </div>
+        
+        <!-- Description des cardinalités -->
+        <div style="margin-top: 30px;">
+            <h2>🔗 Cardinalités des Relations</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
+                <div style="background: #ecf0f1; padding: 15px; border-radius: 10px;">
+                    <h3>👤 USER ↔ 📅 RESERVATION</h3>
+                    <p><strong>1,N ↔ 1,1</strong> : Un utilisateur peut faire plusieurs réservations, une réservation appartient à un utilisateur.</p>
+                </div>
+                
+                <div style="background: #ecf0f1; padding: 15px; border-radius: 10px;">
+                    <h3>👤 USER ↔ 🏆 SCORE</h3>
+                    <p><strong>1,N ↔ 2,2</strong> : Un utilisateur peut avoir plusieurs scores, un score concerne exactement 2 joueurs.</p>
+                </div>
+                
+                <div style="background: #ecf0f1; padding: 15px; border-radius: 10px;">
+                    <h3>👤 USER ↔ 👥 FRIENDSHIP</h3>
+                    <p><strong>1,N ↔ 2,2</strong> : Un utilisateur peut avoir plusieurs amitiés, une amitié relie exactement 2 utilisateurs.</p>
+                </div>
+                
+                <div style="background: #ecf0f1; padding: 15px; border-radius: 10px;">
+                    <h3>🕹️ ARCADE ↔ 🎯 GAME</h3>
+                    <p><strong>1,N ↔ 1,N</strong> : Une arcade peut contenir plusieurs jeux, un jeu peut être sur plusieurs arcades.</p>
+                </div>
+                
+                <div style="background: #ecf0f1; padding: 15px; border-radius: 10px;">
+                    <h3>👤 USER ↔ 🎫 TICKET_OFFER</h3>
+                    <p><strong>1,N ↔ 1,N</strong> : Un utilisateur peut acheter plusieurs offres, une offre peut être achetée par plusieurs utilisateurs.</p>
+                </div>
+                
+                <div style="background: #ecf0f1; padding: 15px; border-radius: 10px;">
+                    <h3>👤 USER ↔ 🎁 PROMO_CODE</h3>
+                    <p><strong>1,N ↔ 0,N</strong> : Un utilisateur peut utiliser plusieurs codes promo, un code peut être utilisé par plusieurs utilisateurs.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Description des entités -->
+        <div style="margin-top: 30px;">
+            <h2>📋 Description des Entités</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">
+                <div style="background: #e8f4fd; padding: 15px; border-radius: 10px; border-left: 5px solid #3498db;">
+                    <h3>👤 USER</h3>
+                    <p>Représente les utilisateurs de l'application. Contient les informations personnelles et le solde de tickets.</p>
+                </div>
+                
+                <div style="background: #fef5e7; padding: 15px; border-radius: 10px; border-left: 5px solid #f39c12;">
+                    <h3>🕹️ ARCADE</h3>
+                    <p>Représente les bornes d'arcade physiques avec leur localisation et configuration.</p>
+                </div>
+                
+                <div style="background: #eafaf1; padding: 15px; border-radius: 10px; border-left: 5px solid #27ae60;">
+                    <h3>🎯 GAME</h3>
+                    <p>Représente les jeux disponibles avec leurs règles (nombre de joueurs, coût en tickets).</p>
+                </div>
+                
+                <div style="background: #f4ecf7; padding: 15px; border-radius: 10px; border-left: 5px solid #9b59b6;">
+                    <h3>📅 RESERVATION</h3>
+                    <p>Gère les réservations des utilisateurs sur les bornes pour jouer à des jeux spécifiques.</p>
+                </div>
+                
+                <div style="background: #eaeded; padding: 15px; border-radius: 10px; border-left: 5px solid #34495e;">
+                    <h3>🏆 SCORE</h3>
+                    <p>Enregistre les résultats des parties jouées entre deux joueurs.</p>
+                </div>
+                
+                <div style="background: #e8f8f5; padding: 15px; border-radius: 10px; border-left: 5px solid #16a085;">
+                    <h3>👥 FRIENDSHIP</h3>
+                    <p>Gère les relations d'amitié entre utilisateurs avec les demandes et acceptations.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

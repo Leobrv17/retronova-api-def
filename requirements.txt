@@ -1,14 +1,27 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
-alembic==1.12.1
-pydantic[email]==2.5.0
-pydantic-settings==2.1.0
-python-multipart==0.0.6
-firebase-admin==6.4.0
-bcrypt==4.1.2
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-dotenv==1.0.0
-httpx==0.25.2
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+pydantic[email]
+pydantic-settings
+python-multipart
+firebase-admin
+bcrypt
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+httpx
+
+# Dépendances de test
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock
+httpx
+
+# Base de données de test
+sqlite3
+
+# Pour les tests d'intégration
+requests

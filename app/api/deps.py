@@ -14,9 +14,7 @@ def get_current_user(
         credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> User:
     """Dependency pour obtenir l'utilisateur actuel via Firebase."""
-    print(credentials.credentials)
     token_data = verify_firebase_token(credentials.credentials, "user")
-    print(">>>",token_data)
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

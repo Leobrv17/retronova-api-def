@@ -103,7 +103,6 @@ class TestAuth:
     def test_get_current_user_success(self, client, auth_headers_user, sample_user):
         """Test de récupération des infos utilisateur connecté."""
         response = client.get("/api/v1/auth/me", headers=auth_headers_user)
-        print("rere", response.json())
 
         assert response.status_code == 200
         data = response.json()

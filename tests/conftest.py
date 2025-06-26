@@ -1,12 +1,20 @@
 import pytest
+import sys
+import os
+from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import tempfile
-import os
 from unittest.mock import patch, MagicMock
 
+# Ajouter le répertoire racine au PYTHONPATH
+root_dir = Path(__file__).parent.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+
+# Maintenant on peut importer les modules de l'app
 from app.main import app
 from app.core.database import get_db, Base
 from app.models import User, Game, Arcade, TicketOffer, PromoCode

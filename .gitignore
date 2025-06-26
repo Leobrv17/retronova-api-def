@@ -2,3 +2,5 @@
 .env
 /firebase
 .idea
+.coverage
+/htmlcov

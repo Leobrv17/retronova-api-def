@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://arcade_user:arcade_password@db:5432/arcade_db
+    env_file:
+      - .env
+    depends_on:
+      - db
+    volumes:
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: arcade_db
+      POSTGRES_USER: arcade_user
+      POSTGRES_PASSWORD: arcade_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+volumes:
+  postgres_data:

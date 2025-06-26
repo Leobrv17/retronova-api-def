@@ -22,8 +22,18 @@ class Reservation(BaseModel):
     status = Column(Enum(ReservationStatus), default=ReservationStatus.WAITING)
     tickets_used = Column(Integer, nullable=False)
 
-    # Relations
-    player = relationship("User", foreign_keys=[player_id], back_populates="reservations")
-    player2 = relationship("User", foreign_keys=[player2_id])
+    # Relations avec foreign_keys explicites pour éviter l'ambiguïté
+    player = relationship(
+        "User",
+        foreign_keys=[player_id],
+        back_populates="reservations"
+    )
+    player2 = relationship(
+        "User",
+        foreign_keys=[player2_id]
+        # Pas de back_populates pour player2 car c'est optionnel
+    )
+
+    # Relations simples (pas d'ambiguïté)
     arcade = relationship("Arcade", back_populates="reservations")
     game = relationship("Game", back_populates="reservations")

@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import tempfile
 from unittest.mock import patch, MagicMock
+import datetime
 
 # Ajouter le répertoire racine au PYTHONPATH
 root_dir = Path(__file__).parent.parent
@@ -86,7 +87,7 @@ def sample_user(db):
         nom="Test",
         prenom="User",
         pseudo="testuser",
-        date_naissance="1990-01-01",
+        date_naissance=datetime.date(1990, 1, 1),
         numero_telephone="0123456789",
         tickets_balance=10
     )
@@ -105,7 +106,7 @@ def sample_admin_user(db):
         nom="Admin",
         prenom="User",
         pseudo="adminuser",
-        date_naissance="1985-01-01",
+        date_naissance=datetime.date(1990, 1, 1),
         numero_telephone="0987654321",
         tickets_balance=0
     )

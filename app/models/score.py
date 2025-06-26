@@ -13,8 +13,18 @@ class Score(BaseModel):
     score_j1 = Column(Integer, nullable=False)
     score_j2 = Column(Integer, nullable=False)
 
-    # Relations
-    player1 = relationship("User", foreign_keys=[player1_id], back_populates="scores_player1")
-    player2 = relationship("User", foreign_keys=[player2_id], back_populates="scores_player2")
+    # Relations avec foreign_keys explicites pour éviter l'ambiguïté
+    player1 = relationship(
+        "User",
+        foreign_keys=[player1_id],
+        back_populates="scores_player1"
+    )
+    player2 = relationship(
+        "User",
+        foreign_keys=[player2_id],
+        back_populates="scores_player2"
+    )
+
+    # Relations simples (pas d'ambiguïté)
     game = relationship("Game", back_populates="scores")
     arcade = relationship("Arcade", back_populates="scores")

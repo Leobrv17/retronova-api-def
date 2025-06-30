@@ -9,6 +9,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.sql import table, column
+from datetime import datetime
 
 # revision identifiers, used by Alembic.
 revision: str = '002'
@@ -64,30 +65,33 @@ def upgrade() -> None:
         column('is_deleted', sa.Boolean)
     )
 
+    # Utiliser datetime.utcnow() au lieu de sa.func.now()
+    now = datetime.utcnow()
+
     # Insertion des offres de tickets
     op.bulk_insert(ticket_offers, [
         {
             'tickets_amount': 1,
             'price_euros': 2.0,
             'name': '1 Ticket',
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
             'tickets_amount': 10,
             'price_euros': 15.0,
             'name': '10 Tickets',
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
             'tickets_amount': 20,
             'price_euros': 20.0,
             'name': '20 Tickets',
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         }
     ])
@@ -100,8 +104,8 @@ def upgrade() -> None:
             'min_players': 1,
             'max_players': 2,
             'ticket_cost': 1,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
@@ -110,8 +114,8 @@ def upgrade() -> None:
             'min_players': 1,
             'max_players': 1,
             'ticket_cost': 1,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
@@ -120,8 +124,8 @@ def upgrade() -> None:
             'min_players': 1,
             'max_players': 2,
             'ticket_cost': 1,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
@@ -130,8 +134,8 @@ def upgrade() -> None:
             'min_players': 1,
             'max_players': 1,
             'ticket_cost': 1,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         }
     ])
@@ -145,8 +149,8 @@ def upgrade() -> None:
             'localisation': 'Centre-ville Toulouse',
             'latitude': 43.6047,
             'longitude': 1.4442,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
@@ -156,8 +160,8 @@ def upgrade() -> None:
             'localisation': 'Campus Université Toulouse',
             'latitude': 43.5615,
             'longitude': 1.4679,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         }
     ])
@@ -168,32 +172,32 @@ def upgrade() -> None:
             'arcade_id': 1,
             'game_id': 1,
             'slot_number': 1,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
             'arcade_id': 1,
             'game_id': 2,
             'slot_number': 2,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
             'arcade_id': 2,
             'game_id': 3,
             'slot_number': 1,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         },
         {
             'arcade_id': 2,
             'game_id': 4,
             'slot_number': 2,
-            'created_at': sa.func.now(),
-            'updated_at': sa.func.now(),
+            'created_at': now,
+            'updated_at': now,
             'is_deleted': False
         }
     ])

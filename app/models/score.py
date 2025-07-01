@@ -7,13 +7,13 @@ class Score(BaseModel):
     __tablename__ = "scores"
 
     player1_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    player2_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    player2_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
     arcade_id = Column(Integer, ForeignKey("arcades.id"), nullable=False)
     score_j1 = Column(Integer, nullable=False)
-    score_j2 = Column(Integer, nullable=False)
+    score_j2 = Column(Integer, nullable=True)
 
-    # Relations avec foreign_keys explicites pour éviter l'ambiguïté
+    # Relations avec foreign_keys explicites
     player1 = relationship(
         "User",
         foreign_keys=[player1_id],
@@ -25,6 +25,6 @@ class Score(BaseModel):
         back_populates="scores_player2"
     )
 
-    # Relations simples (pas d'ambiguïté)
+    # Relations simples
     game = relationship("Game", back_populates="scores")
     arcade = relationship("Arcade", back_populates="scores")

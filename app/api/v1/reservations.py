@@ -7,7 +7,7 @@ from app.models.user import User
 from app.models.arcade import Arcade, ArcadeGame
 from app.models.game import Game
 from app.models.reservation import Reservation, ReservationStatus
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, verify_arcade_key
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -33,6 +33,8 @@ class ReservationResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class UpdateReservationStatusRequest(BaseModel):
+    status: ReservationStatus
 
 @router.post("/", response_model=ReservationResponse)
 async def create_reservation(
@@ -280,3 +282,79 @@ async def cancel_reservation(
     db.commit()
 
     return {"message": "Réservation annulée, tickets remboursés"}
+
+
+@router.put("/{reservation_id}/status")
+async def update_reservation_status(
+        reservation_id: int,
+        status_data: UpdateReservationStatusRequest,
+        db: Session = Depends(get_db),
+        _: bool = Depends(verify_arcade_key)  # Seules les bornes peuvent changer le statut
+):
+    """Met à jour le statut d'une réservation (accessible par clé API borne uniquement)."""
+
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.is_deleted == False
+    ).first()
+
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Réservation non trouvée"
+        )
+
+    # Validation des transitions de statut
+    valid_transitions = {
+        ReservationStatus.WAITING: [ReservationStatus.PLAYING, ReservationStatus.CANCELLED],
+        ReservationStatus.PLAYING: [ReservationStatus.COMPLETED, ReservationStatus.CANCELLED],
+        ReservationStatus.COMPLETED: [],  # État final
+        ReservationStatus.CANCELLED: []  # État final
+    }
+
+    if status_data.status not in valid_transitions.get(reservation.status, []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Transition invalide de {reservation.status.value} vers {status_data.status.value}"
+        )
+
+    # Mettre à jour le statut
+    old_status = reservation.status
+    reservation.status = status_data.status
+    db.commit()
+    db.refresh(reservation)
+
+    return {
+        "message": f"Statut mis à jour de {old_status.value} vers {status_data.status.value}",
+        "reservation_id": reservation.id,
+        "old_status": old_status.value,
+        "new_status": reservation.status.value
+    }
+
+
+@router.get("/{reservation_id}/status")
+async def get_reservation_status(
+        reservation_id: int,
+        db: Session = Depends(get_db),
+        _: bool = Depends(verify_arcade_key)
+):
+    """Récupère le statut d'une réservation (accessible par clé API borne)."""
+
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.is_deleted == False
+    ).first()
+
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Réservation non trouvée"
+        )
+
+    return {
+        "reservation_id": reservation.id,
+        "status": reservation.status.value,
+        "player_pseudo": reservation.player.pseudo,
+        "game_name": reservation.game.nom,
+        "unlock_code": reservation.unlock_code
+    }

@@ -1,3 +1,6 @@
+# Correction du fichier app/api/v1/arcades.py
+# Ajout des IDs des joueurs dans la réponse de la file d'attente
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -40,8 +43,11 @@ class ArcadeResponse(BaseModel):
 
 class QueueItemResponse(BaseModel):
     id: int
+    player_id: int  # AJOUT: ID du joueur principal
     player_pseudo: str
+    player2_id: Optional[int] = None  # AJOUT: ID du joueur 2
     player2_pseudo: Optional[str]
+    game_id: int  # AJOUT: ID du jeu
     game_name: str
     unlock_code: str
     position: int
@@ -169,7 +175,7 @@ async def get_arcade_queue(
             detail="Borne d'arcade non trouvée"
         )
 
-    # Récupérer la file d'attente (FIFO)
+    # Récupérer la file d'attente (FIFO) avec toutes les informations nécessaires
     reservations = db.query(Reservation).join(
         User, Reservation.player_id == User.id
     ).join(
@@ -182,16 +188,22 @@ async def get_arcade_queue(
 
     queue = []
     for i, reservation in enumerate(reservations):
+        # Récupérer le joueur 2 si présent
+        player2_id = None
         player2_pseudo = None
         if reservation.player2_id:
             player2 = db.query(User).filter(User.id == reservation.player2_id).first()
             if player2:
+                player2_id = player2.id
                 player2_pseudo = player2.pseudo
 
         queue_item = QueueItemResponse(
             id=reservation.id,
+            player_id=reservation.player_id,  # ID du joueur principal
             player_pseudo=reservation.player.pseudo,
+            player2_id=player2_id,  # ID du joueur 2 (optionnel)
             player2_pseudo=player2_pseudo,
+            game_id=reservation.game_id,  # ID du jeu
             game_name=reservation.game.nom,
             unlock_code=reservation.unlock_code,
             position=i + 1

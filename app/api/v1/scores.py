@@ -17,23 +17,24 @@ router = APIRouter()
 
 class CreateScoreRequest(BaseModel):
     player1_id: int
-    player2_id: int
+    player2_id: Optional[int] = None  # Maintenant optionnel
     game_id: int
     arcade_id: int
     score_j1: int
-    score_j2: int
+    score_j2: Optional[int] = None  # Optionnel pour jeu solo
 
 
 class ScoreResponse(BaseModel):
     id: int
     player1_pseudo: str
-    player2_pseudo: str
+    player2_pseudo: Optional[str] = None  # Peut être None
     game_name: str
     arcade_name: str
     score_j1: int
-    score_j2: int
-    winner_pseudo: str
+    score_j2: Optional[int] = None
+    winner_pseudo: Optional[str] = None  # Peut être None pour jeu solo
     created_at: str
+    is_single_player: bool  # Nouveau champ
 
     class Config:
         from_attributes = True
@@ -47,28 +48,37 @@ async def create_score(
 ):
     """Enregistre un nouveau score (authentification par clé API borne)."""
 
-    # Vérifier que les joueurs existent
+    # Vérifier que le joueur 1 existe
     player1 = db.query(User).filter(
         User.id == score_data.player1_id,
         User.is_deleted == False
     ).first()
 
-    player2 = db.query(User).filter(
-        User.id == score_data.player2_id,
-        User.is_deleted == False
-    ).first()
-
-    if not player1 or not player2:
+    if not player1:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Un ou plusieurs joueurs non trouvés"
+            detail="Joueur 1 non trouvé"
         )
 
-    if player1.id == player2.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Les deux joueurs ne peuvent pas être identiques"
-        )
+    # Si c'est un jeu à 2 joueurs, vérifier le joueur 2
+    player2 = None
+    if score_data.player2_id:
+        if score_data.player1_id == score_data.player2_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Les deux joueurs ne peuvent pas être identiques"
+            )
+
+        player2 = db.query(User).filter(
+            User.id == score_data.player2_id,
+            User.is_deleted == False
+        ).first()
+
+        if not player2:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Joueur 2 non trouvé"
+            )
 
     # Vérifier que le jeu existe
     game = db.query(Game).filter(
@@ -94,6 +104,24 @@ async def create_score(
             detail="Borne d'arcade non trouvée"
         )
 
+    # Validation cohérence jeu solo/multi
+    is_single_player = score_data.player2_id is None
+
+    if is_single_player:
+        # Jeu solo : vérifier que le jeu accepte 1 joueur
+        if game.min_players > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ce jeu nécessite au minimum {game.min_players} joueurs"
+            )
+    else:
+        # Jeu multi : vérifier que le jeu accepte 2 joueurs
+        if game.max_players < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce jeu ne supporte pas 2 joueurs"
+            )
+
     # Créer le score
     score = Score(
         player1_id=score_data.player1_id,
@@ -109,19 +137,25 @@ async def create_score(
     db.refresh(score)
 
     # Déterminer le gagnant
-    winner_pseudo = player1.pseudo if score_data.score_j1 > score_data.score_j2 else player2.pseudo
-    if score_data.score_j1 == score_data.score_j2:
-        winner_pseudo = "Égalité"
+    winner_pseudo = None
+    if not is_single_player:
+        if score_data.score_j1 > score_data.score_j2:
+            winner_pseudo = player1.pseudo
+        elif score_data.score_j2 > score_data.score_j1:
+            winner_pseudo = player2.pseudo
+        else:
+            winner_pseudo = "Égalité"
 
     return ScoreResponse(
         id=score.id,
         player1_pseudo=player1.pseudo,
-        player2_pseudo=player2.pseudo,
+        player2_pseudo=player2.pseudo if player2 else None,
         game_name=game.nom,
         arcade_name=arcade.nom,
         score_j1=score_data.score_j1,
         score_j2=score_data.score_j2,
         winner_pseudo=winner_pseudo,
+        is_single_player=is_single_player,
         created_at=score.created_at.isoformat()
     )
 
@@ -131,6 +165,7 @@ async def get_scores(
         game_id: Optional[int] = Query(None, description="Filtrer par jeu"),
         arcade_id: Optional[int] = Query(None, description="Filtrer par borne"),
         friends_only: bool = Query(False, description="Afficher seulement les scores avec mes amis"),
+        single_player_only: bool = Query(False, description="Afficher seulement les scores solo"),
         limit: int = Query(50, le=100),
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
@@ -142,7 +177,7 @@ async def get_scores(
 
     query = db.query(Score).join(
         Player1, Score.player1_id == Player1.id
-    ).join(
+    ).outerjoin(  # LEFT JOIN pour player2 (peut être NULL)
         Player2, Score.player2_id == Player2.id
     ).join(
         Game, Score.game_id == Game.id
@@ -160,20 +195,12 @@ async def get_scores(
     if arcade_id:
         query = query.filter(Score.arcade_id == arcade_id)
 
+    # Filtrer solo uniquement
+    if single_player_only:
+        query = query.filter(Score.player2_id.is_(None))
+
     # Filtrer par amis si demandé
     if friends_only:
-        # Récupérer les IDs des amis
-        friends_subquery = db.query(Friendship).filter(
-            and_(
-                or_(
-                    Friendship.requester_id == current_user.id,
-                    Friendship.requested_id == current_user.id
-                ),
-                Friendship.status == FriendshipStatus.ACCEPTED,
-                Friendship.is_deleted == False
-            )
-        ).subquery()
-
         friend_ids = []
         friendships = db.query(Friendship).filter(
             and_(
@@ -191,11 +218,14 @@ async def get_scores(
             friend_ids.append(friend_id)
 
         if not friend_ids:
-            return []  # Pas d'amis = pas de scores
+            return []
 
-        # Filtrer les scores où l'utilisateur actuel joue contre un ami
+        # Filtrer les scores où l'utilisateur actuel joue (solo ou contre un ami)
         query = query.filter(
             or_(
+                # Scores solo de l'utilisateur
+                and_(Score.player1_id == current_user.id, Score.player2_id.is_(None)),
+                # Scores multi avec amis
                 and_(Score.player1_id == current_user.id, Score.player2_id.in_(friend_ids)),
                 and_(Score.player2_id == current_user.id, Score.player1_id.in_(friend_ids))
             )
@@ -207,24 +237,35 @@ async def get_scores(
     for score in scores:
         # Récupérer les infos des joueurs
         player1 = db.query(User).filter(User.id == score.player1_id).first()
-        player2 = db.query(User).filter(User.id == score.player2_id).first()
+        player2 = None
+        if score.player2_id:
+            player2 = db.query(User).filter(User.id == score.player2_id).first()
+
         game = db.query(Game).filter(Game.id == score.game_id).first()
         arcade = db.query(Arcade).filter(Arcade.id == score.arcade_id).first()
 
         # Déterminer le gagnant
-        winner_pseudo = player1.pseudo if score.score_j1 > score.score_j2 else player2.pseudo
-        if score.score_j1 == score.score_j2:
-            winner_pseudo = "Égalité"
+        winner_pseudo = None
+        is_single_player = score.player2_id is None
+
+        if not is_single_player:
+            if score.score_j1 > score.score_j2:
+                winner_pseudo = player1.pseudo
+            elif score.score_j2 > score.score_j1:
+                winner_pseudo = player2.pseudo
+            else:
+                winner_pseudo = "Égalité"
 
         result.append(ScoreResponse(
             id=score.id,
             player1_pseudo=player1.pseudo,
-            player2_pseudo=player2.pseudo,
+            player2_pseudo=player2.pseudo if player2 else None,
             game_name=game.nom,
             arcade_name=arcade.nom,
             score_j1=score.score_j1,
             score_j2=score.score_j2,
             winner_pseudo=winner_pseudo,
+            is_single_player=is_single_player,
             created_at=score.created_at.isoformat()
         ))
 
@@ -238,7 +279,7 @@ async def get_my_stats(
 ):
     """Récupère les statistiques personnelles de l'utilisateur."""
 
-    # Compter les parties jouées
+    # Compter les parties jouées (solo + multi)
     total_games = db.query(Score).filter(
         or_(
             Score.player1_id == current_user.id,
@@ -247,31 +288,43 @@ async def get_my_stats(
         Score.is_deleted == False
     ).count()
 
-    # Compter les victoires
+    # Compter les parties solo
+    solo_games = db.query(Score).filter(
+        Score.player1_id == current_user.id,
+        Score.player2_id.is_(None),
+        Score.is_deleted == False
+    ).count()
+
+    # Compter les victoires (seulement pour jeux multi)
     wins = db.query(Score).filter(
         or_(
             and_(Score.player1_id == current_user.id, Score.score_j1 > Score.score_j2),
             and_(Score.player2_id == current_user.id, Score.score_j2 > Score.score_j1)
         ),
+        Score.player2_id.isnot(None),  # Seulement jeux multi
         Score.is_deleted == False
     ).count()
 
-    # Compter les défaites
+    # Compter les défaites (seulement pour jeux multi)
     losses = db.query(Score).filter(
         or_(
             and_(Score.player1_id == current_user.id, Score.score_j1 < Score.score_j2),
             and_(Score.player2_id == current_user.id, Score.score_j2 < Score.score_j1)
         ),
+        Score.player2_id.isnot(None),  # Seulement jeux multi
         Score.is_deleted == False
     ).count()
 
-    # Compter les égalités
-    draws = total_games - wins - losses
+    # Compter les égalités (seulement pour jeux multi)
+    multi_games = total_games - solo_games
+    draws = multi_games - wins - losses
 
-    win_rate = (wins / total_games * 100) if total_games > 0 else 0
+    win_rate = (wins / multi_games * 100) if multi_games > 0 else 0
 
     return {
         "total_games": total_games,
+        "solo_games": solo_games,
+        "multiplayer_games": multi_games,
         "wins": wins,
         "losses": losses,
         "draws": draws,

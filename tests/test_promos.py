@@ -19,7 +19,6 @@ class TestPromos:
         assert data["tickets_received"] == sample_promo_code.tickets_reward
         assert data["new_balance"] == initial_balance + sample_promo_code.tickets_reward
         assert "succès" in data["message"]
-
         # Vérifier que le solde a été mis à jour
         db.refresh(sample_user)
         assert sample_user.tickets_balance == initial_balance + sample_promo_code.tickets_reward

@@ -5,6 +5,7 @@ from app.models.user import User
 from app.models.promo import PromoCode, PromoUse
 from app.api.deps import get_current_user
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -38,6 +39,25 @@ async def use_promo_code(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Code promo invalide"
         )
+
+    # Vérifier la validité du code (dates + activation)
+    if not promo_code.is_valid_now():
+        if promo_code.is_expired():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce code promo a expiré"
+            )
+        elif not promo_code.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce code promo n'est plus actif"
+            )
+        else:
+            # Code pas encore valide (valid_from dans le futur)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ce code promo n'est pas encore valide"
+            )
 
     # Vérifier si l'utilisateur a déjà utilisé ce code
     if promo_code.is_single_use_per_user:
@@ -114,3 +134,50 @@ async def get_promo_history(
         })
 
     return history
+
+
+@router.get("/available")
+async def get_available_promo_codes(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    """Récupère les codes promo disponibles pour l'utilisateur (non sensible)."""
+
+    # Cette route pourrait être utilisée pour afficher des codes publics
+    # ou des indices sur les codes disponibles
+    now = datetime.now(timezone.utc)
+
+    available_codes = db.query(PromoCode).filter(
+        PromoCode.is_deleted == False,
+        PromoCode.is_active == True,
+        # Codes actuellement valides
+        (PromoCode.valid_from.is_(None) | (PromoCode.valid_from <= now)),
+        (PromoCode.valid_until.is_(None) | (PromoCode.valid_until > now)),
+        # Codes qui ont encore des utilisations disponibles
+        (PromoCode.usage_limit.is_(None) | (PromoCode.current_uses < PromoCode.usage_limit))
+    ).all()
+
+    # Filtrer ceux déjà utilisés par l'utilisateur si single_use_per_user
+    result = []
+    for code in available_codes:
+        if code.is_single_use_per_user:
+            existing_use = db.query(PromoUse).filter(
+                PromoUse.user_id == current_user.id,
+                PromoUse.promo_code_id == code.id,
+                PromoUse.is_deleted == False
+            ).first()
+
+            if existing_use:
+                continue  # Skip ce code, déjà utilisé
+
+        # Ne pas révéler le code exact, juste des infos générales
+        result.append({
+            "id": code.id,
+            "tickets_reward": code.tickets_reward,
+            "usage_limit": code.usage_limit,
+            "current_uses": code.current_uses,
+            "valid_until": code.valid_until.isoformat() if code.valid_until else None,
+            "days_until_expiry": code.days_until_expiry()
+        })
+
+    return result

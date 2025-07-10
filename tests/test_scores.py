@@ -113,7 +113,7 @@ class TestScores:
         response = client.post("/api/v1/scores/", json=score_data, headers=arcade_api_headers)
 
         assert response.status_code == 404
-        assert "joueurs non trouvés" in response.json()["detail"]
+        assert "Joueur 1 non trouvé" in response.json()["detail"]
 
     def test_create_score_same_players(self, client, arcade_api_headers, sample_user, sample_game, sample_arcade):
         """Test de création avec les mêmes joueurs."""

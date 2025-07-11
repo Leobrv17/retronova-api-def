@@ -445,6 +445,247 @@ async def restore_user(
     return {"message": f"Utilisateur {user.pseudo} restauré"}
 
 
+@router.delete("/users/{user_id}")
+async def soft_delete_user(
+        user_id: int,
+        db: Session = Depends(get_db),
+        _: dict = Depends(get_current_admin)
+):
+    """Supprime un utilisateur (soft delete) - Accès admin uniquement."""
+
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.is_deleted == False
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
+        )
+
+    # Vérifier s'il y a des réservations en cours
+    from app.models.reservation import Reservation, ReservationStatus
+    active_reservations = db.query(Reservation).filter(
+        (Reservation.player_id == user_id) | (Reservation.player2_id == user_id),
+        Reservation.status.in_([ReservationStatus.WAITING, ReservationStatus.PLAYING]),
+        Reservation.is_deleted == False
+    ).count()
+
+    if active_reservations > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Impossible de supprimer l'utilisateur : {active_reservations} réservation(s) active(s). "
+                   "Veuillez d'abord gérer les réservations en cours."
+        )
+
+    # Soft delete de l'utilisateur
+    user.is_deleted = True
+    user.deleted_at = datetime.now(timezone.utc)
+
+    # Soft delete des relations d'amitié
+    from app.models.friend import Friendship
+    friendships = db.query(Friendship).filter(
+        (Friendship.requester_id == user_id) | (Friendship.requested_id == user_id),
+        Friendship.is_deleted == False
+    ).all()
+
+    deleted_friendships = 0
+    for friendship in friendships:
+        friendship.is_deleted = True
+        friendship.deleted_at = datetime.now(timezone.utc)
+        deleted_friendships += 1
+
+    # Soft delete des codes promo utilisés (optionnel, pour conformité RGPD)
+    from app.models.promo import PromoUse
+    promo_uses = db.query(PromoUse).filter(
+        PromoUse.user_id == user_id,
+        PromoUse.is_deleted == False
+    ).all()
+
+    deleted_promo_uses = 0
+    for promo_use in promo_uses:
+        promo_use.is_deleted = True
+        promo_use.deleted_at = datetime.now(timezone.utc)
+        deleted_promo_uses += 1
+
+    # Soft delete des achats de tickets (optionnel, pour conformité RGPD)
+    from app.models.ticket import TicketPurchase
+    ticket_purchases = db.query(TicketPurchase).filter(
+        TicketPurchase.user_id == user_id,
+        TicketPurchase.is_deleted == False
+    ).all()
+
+    deleted_purchases = 0
+    for purchase in ticket_purchases:
+        purchase.is_deleted = True
+        purchase.deleted_at = datetime.now(timezone.utc)
+        deleted_purchases += 1
+
+    db.commit()
+
+    return {
+        "message": f"Utilisateur '{user.pseudo}' supprimé avec succès",
+        "user_id": user.id,
+        "deleted_friendships": deleted_friendships,
+        "deleted_promo_uses": deleted_promo_uses,
+        "deleted_purchases": deleted_purchases,
+        "note": "Les scores sont conservés de manière anonymisée pour l'intégrité des données de jeu"
+    }
+
+
+@router.get("/users/{user_id}/deletion-impact")
+async def get_user_deletion_impact(
+        user_id: int,
+        db: Session = Depends(get_db),
+        _: dict = Depends(get_current_admin)
+):
+    """Analyse l'impact de la suppression d'un utilisateur avant de la confirmer."""
+
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.is_deleted == False
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
+        )
+
+    # Compter les éléments qui seraient affectés
+    from app.models.reservation import Reservation, ReservationStatus
+    from app.models.friend import Friendship
+    from app.models.promo import PromoUse
+    from app.models.ticket import TicketPurchase
+    from app.models.score import Score
+
+    # Réservations actives (bloquantes)
+    active_reservations = db.query(Reservation).filter(
+        (Reservation.player_id == user_id) | (Reservation.player2_id == user_id),
+        Reservation.status.in_([ReservationStatus.WAITING, ReservationStatus.PLAYING]),
+        Reservation.is_deleted == False
+    ).count()
+
+    # Réservations terminées (conservées)
+    completed_reservations = db.query(Reservation).filter(
+        (Reservation.player_id == user_id) | (Reservation.player2_id == user_id),
+        Reservation.status.in_([ReservationStatus.COMPLETED, ReservationStatus.CANCELLED]),
+        Reservation.is_deleted == False
+    ).count()
+
+    # Amitiés
+    friendships_count = db.query(Friendship).filter(
+        (Friendship.requester_id == user_id) | (Friendship.requested_id == user_id),
+        Friendship.is_deleted == False
+    ).count()
+
+    # Codes promo utilisés
+    promo_uses_count = db.query(PromoUse).filter(
+        PromoUse.user_id == user_id,
+        PromoUse.is_deleted == False
+    ).count()
+
+    # Achats de tickets
+    purchases_count = db.query(TicketPurchase).filter(
+        TicketPurchase.user_id == user_id,
+        TicketPurchase.is_deleted == False
+    ).count()
+
+    # Scores (conservés de manière anonymisée)
+    scores_as_player1 = db.query(Score).filter(
+        Score.player1_id == user_id,
+        Score.is_deleted == False
+    ).count()
+
+    scores_as_player2 = db.query(Score).filter(
+        Score.player2_id == user_id,
+        Score.is_deleted == False
+    ).count()
+
+    total_scores = scores_as_player1 + scores_as_player2
+
+    can_delete = active_reservations == 0
+
+    return {
+        "user": {
+            "id": user.id,
+            "pseudo": user.pseudo,
+            "email": user.email,
+            "tickets_balance": user.tickets_balance,
+            "created_at": user.created_at.isoformat()
+        },
+        "can_delete": can_delete,
+        "blocking_factors": {
+            "active_reservations": active_reservations
+        } if not can_delete else {},
+        "deletion_impact": {
+            "friendships_to_delete": friendships_count,
+            "promo_uses_to_delete": promo_uses_count,
+            "purchases_to_delete": purchases_count,
+            "completed_reservations_preserved": completed_reservations,
+            "scores_anonymized": total_scores
+        },
+        "recommendations": [
+                               "Les scores seront conservés de manière anonymisée pour préserver l'intégrité des classements",
+                               "Les réservations terminées seront préservées pour l'historique",
+                               "Les données personnelles seront marquées comme supprimées conformément au RGPD"
+                           ] + (
+                               ["⚠️ Annulez d'abord les réservations actives avant la suppression"] if not can_delete else [])
+    }
+
+
+@router.put("/users/{user_id}/force-cancel-reservations")
+async def force_cancel_user_reservations(
+        user_id: int,
+        db: Session = Depends(get_db),
+        _: dict = Depends(get_current_admin)
+):
+    """Force l'annulation de toutes les réservations actives d'un utilisateur (admin uniquement)."""
+
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.is_deleted == False
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur non trouvé"
+        )
+
+    # Annuler toutes les réservations actives
+    from app.models.reservation import Reservation, ReservationStatus
+    active_reservations = db.query(Reservation).filter(
+        (Reservation.player_id == user_id) | (Reservation.player2_id == user_id),
+        Reservation.status.in_([ReservationStatus.WAITING, ReservationStatus.PLAYING]),
+        Reservation.is_deleted == False
+    ).all()
+
+    cancelled_count = 0
+    refunded_tickets = 0
+
+    for reservation in active_reservations:
+        # Annuler la réservation
+        reservation.status = ReservationStatus.CANCELLED
+
+        # Rembourser les tickets si l'utilisateur était le joueur principal
+        if reservation.player_id == user_id:
+            user.tickets_balance += reservation.tickets_used
+            refunded_tickets += reservation.tickets_used
+
+        cancelled_count += 1
+
+    db.commit()
+
+    return {
+        "message": f"Réservations de l'utilisateur '{user.pseudo}' annulées",
+        "user_id": user.id,
+        "cancelled_reservations": cancelled_count,
+        "refunded_tickets": refunded_tickets,
+        "new_tickets_balance": user.tickets_balance
+    }
+
 # === STATISTIQUES ===
 @router.get("/stats")
 async def get_admin_stats(

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-from datetime import datetime
+
 from app.core.database import get_db
 from app.models.user import User
 from app.models.arcade import Arcade, ArcadeGame
@@ -11,7 +11,7 @@ from app.models.promo import PromoCode
 from app.models.ticket import TicketOffer
 from app.api.deps import get_current_admin
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter()
 
@@ -38,6 +38,19 @@ class CreatePromoCodeRequest(BaseModel):
     is_single_use_global: bool = False
     is_single_use_per_user: bool = True
     usage_limit: Optional[int] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    is_active: bool = True
+
+
+class UpdatePromoCodeRequest(BaseModel):
+    tickets_reward: Optional[int] = None
+    is_single_use_global: Optional[bool] = None
+    is_single_use_per_user: Optional[bool] = None
+    usage_limit: Optional[int] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    is_active: Optional[bool] = None
 
 
 class UpdateUserTicketsRequest(BaseModel):
@@ -155,7 +168,15 @@ async def create_promo_code(
         db: Session = Depends(get_db),
         _: dict = Depends(get_current_admin)
 ):
-    """Crée un nouveau code promo."""
+    """Crée un nouveau code promo avec gestion des dates."""
+
+    # Validation des dates
+    if promo_data.valid_from and promo_data.valid_until:
+        if promo_data.valid_until <= promo_data.valid_from:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La date d'expiration doit être après la date de début"
+            )
 
     # Vérifier que le code n'existe pas déjà
     existing = db.query(PromoCode).filter(
@@ -173,29 +194,176 @@ async def create_promo_code(
         tickets_reward=promo_data.tickets_reward,
         is_single_use_global=promo_data.is_single_use_global,
         is_single_use_per_user=promo_data.is_single_use_per_user,
-        usage_limit=promo_data.usage_limit
+        usage_limit=promo_data.usage_limit,
+        valid_from=promo_data.valid_from,
+        valid_until=promo_data.valid_until,
+        is_active=promo_data.is_active
     )
 
     db.add(promo_code)
     db.commit()
     db.refresh(promo_code)
 
-    return {"message": "Code promo créé", "promo_code_id": promo_code.id}
+    return {
+        "message": "Code promo créé",
+        "promo_code_id": promo_code.id,
+        "is_valid_now": promo_code.is_valid_now(),
+        "days_until_expiry": promo_code.days_until_expiry()
+    }
+
+
+@router.put("/promo-codes/{promo_code_id}")
+async def update_promo_code(
+        promo_code_id: int,
+        update_data: UpdatePromoCodeRequest,
+        db: Session = Depends(get_db),
+        _: dict = Depends(get_current_admin)
+):
+    """Met à jour un code promo existant."""
+
+    promo_code = db.query(PromoCode).filter(
+        PromoCode.id == promo_code_id,
+        PromoCode.is_deleted == False
+    ).first()
+
+    if not promo_code:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code promo non trouvé"
+        )
+
+    # Validation des dates si elles sont mises à jour
+    valid_from = update_data.valid_from if update_data.valid_from is not None else promo_code.valid_from
+    valid_until = update_data.valid_until if update_data.valid_until is not None else promo_code.valid_until
+
+    if valid_from and valid_until and valid_until <= valid_from:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La date d'expiration doit être après la date de début"
+        )
+
+    # Mettre à jour les champs modifiés
+    update_dict = update_data.dict(exclude_unset=True)
+    for field, value in update_dict.items():
+        setattr(promo_code, field, value)
+
+    db.commit()
+    db.refresh(promo_code)
+
+    return {
+        "message": "Code promo mis à jour",
+        "promo_code_id": promo_code.id,
+        "is_valid_now": promo_code.is_valid_now(),
+        "days_until_expiry": promo_code.days_until_expiry()
+    }
 
 
 @router.get("/promo-codes/")
 async def list_promo_codes(
+        include_expired: bool = False,
         db: Session = Depends(get_db),
         _: dict = Depends(get_current_admin)
 ):
-    """Liste tous les codes promo."""
+    """Liste tous les codes promo avec filtrage optionnel."""
 
-    promo_codes = db.query(PromoCode).filter(
+    query = db.query(PromoCode).filter(PromoCode.is_deleted == False)
+
+    if not include_expired:
+        now = datetime.now(timezone.utc)
+        query = query.filter(
+            (PromoCode.valid_until.is_(None) | (PromoCode.valid_until > now))
+        )
+
+    promo_codes = query.order_by(PromoCode.created_at.desc()).all()
+
+    result = []
+    for promo in promo_codes:
+        result.append({
+            "id": promo.id,
+            "code": promo.code,
+            "tickets_reward": promo.tickets_reward,
+            "usage_limit": promo.usage_limit,
+            "current_uses": promo.current_uses,
+            "is_single_use_global": promo.is_single_use_global,
+            "is_single_use_per_user": promo.is_single_use_per_user,
+            "valid_from": promo.valid_from.isoformat() if promo.valid_from else None,
+            "valid_until": promo.valid_until.isoformat() if promo.valid_until else None,
+            "is_active": promo.is_active,
+            "is_valid_now": promo.is_valid_now(),
+            "is_expired": promo.is_expired(),
+            "days_until_expiry": promo.days_until_expiry(),
+            "created_at": promo.created_at.isoformat()
+        })
+
+    return result
+
+
+@router.post("/promo-codes/{promo_code_id}/toggle-active")
+async def toggle_promo_code_active(
+        promo_code_id: int,
+        db: Session = Depends(get_db),
+        _: dict = Depends(get_current_admin)
+):
+    """Active/désactive manuellement un code promo."""
+
+    promo_code = db.query(PromoCode).filter(
+        PromoCode.id == promo_code_id,
         PromoCode.is_deleted == False
-    ).all()
+    ).first()
 
-    return promo_codes
+    if not promo_code:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Code promo non trouvé"
+        )
 
+    promo_code.is_active = not promo_code.is_active
+    db.commit()
+
+    return {
+        "message": f"Code promo {'activé' if promo_code.is_active else 'désactivé'}",
+        "promo_code_id": promo_code.id,
+        "is_active": promo_code.is_active,
+        "is_valid_now": promo_code.is_valid_now()
+    }
+
+
+@router.get("/promo-codes/expiring-soon")
+async def get_expiring_promo_codes(
+        days_ahead: int = 7,
+        db: Session = Depends(get_db),
+        _: dict = Depends(get_current_admin)
+):
+    """Récupère les codes promo qui expirent bientôt."""
+
+    now = datetime.now(timezone.utc)
+    future_date = now + timedelta(days=days_ahead)
+
+    expiring_codes = db.query(PromoCode).filter(
+        PromoCode.is_deleted == False,
+        PromoCode.is_active == True,
+        PromoCode.valid_until.isnot(None),
+        PromoCode.valid_until <= future_date,
+        PromoCode.valid_until > now
+    ).order_by(PromoCode.valid_until).all()
+
+    result = []
+    for promo in expiring_codes:
+        result.append({
+            "id": promo.id,
+            "code": promo.code,
+            "tickets_reward": promo.tickets_reward,
+            "valid_until": promo.valid_until.isoformat(),
+            "days_until_expiry": promo.days_until_expiry(),
+            "current_uses": promo.current_uses,
+            "usage_limit": promo.usage_limit
+        })
+
+    return {
+        "expiring_codes": result,
+        "total_count": len(result),
+        "days_ahead": days_ahead
+    }
 
 # === GESTION DES UTILISATEURS ===
 @router.put("/users/tickets")

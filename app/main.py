@@ -1,19 +1,30 @@
+# Correction du fichier app/main.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.security import init_firebase
+
+# Import conditionnel de l'initialisation Firebase pour éviter les erreurs en tests
+try:
+    from app.core.security import init_firebase
+    # Initialisation Firebase seulement si pas en mode test
+    import os
+    if os.getenv("TESTING") != "1":
+        init_firebase()
+except Exception as e:
+    # En mode test ou si Firebase n'est pas configuré
+    print(f"Firebase initialization skipped: {e}")
+
 from app.api.v1 import auth, users, friends, tickets, games, arcades, reservations, scores, promos, admin
 
-# Initialisation Firebase
-init_firebase()
-
+# Création de l'application FastAPI
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     debug=settings.DEBUG
 )
 
-# CORS
+# Configuration CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routes
+# Inclusion des routes
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(friends.router, prefix="/api/v1/friends", tags=["friends"])
@@ -37,9 +48,11 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 
 @app.get("/")
 async def root():
+    """Endpoint racine de l'API."""
     return {"message": "Arcade API", "version": settings.VERSION}
 
 
 @app.get("/health")
 async def health_check():
+    """Endpoint de vérification de santé."""
     return {"status": "healthy"}
